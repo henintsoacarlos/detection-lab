@@ -33,7 +33,7 @@ Cette approche s'appelle le **purple teaming** — l'attaquant et le défenseur 
 ```
 
 **Pile technique :**
-- **Hyperviseur** : VirtualBox 7.x — réseau host-only, totalement isolé
+- **Hyperviseur** : VirtualBox 7.2.8 — réseau host-only, totalement isolé
 - **SIEM** : Wazuh 4.14 (mode manager seul, 2 Go de RAM)
 - **Cible Windows** : Windows Server 2022 Core + Sysmon (config SwiftOnSecurity)
 - **Simulation d'attaques** : Atomic Red Team (Invoke-AtomicRedTeam)
