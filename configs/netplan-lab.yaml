@@ -1,0 +1,26 @@
+# ================================================================
+# Configuration réseau Ubuntu — VM Wazuh Manager
+# Laboratoire de Détection Personnel — Purple Team Home Lab
+# ================================================================
+# Carte 1 (enp0s3) : NAT — accès Internet temporaire
+#                    (désactiver après installation)
+# Carte 2 (enp0s8) : Host-only — réseau du labo (192.168.56.0/24)
+# ================================================================
+# Appliquer avec : sudo netplan apply
+# ================================================================
+
+network:
+  version: 2
+  ethernets:
+
+    # Carte NAT — accès Internet pour les mises à jour
+    # Désactiver le câble dans VirtualBox après installation complète
+    enp0s3:
+      dhcp4: true
+
+    # Carte host-only — réseau isolé du laboratoire
+    # IP fixe : ne pas modifier sauf refonte de l'architecture
+    enp0s8:
+      dhcp4: false
+      addresses:
+        - 192.168.56.10/24

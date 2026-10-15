@@ -1,0 +1,189 @@
+<!--
+  ================================================================
+  Configuration Sysmon — VM Windows cible
+  Laboratoire de Détection Personnel — Purple Team Home Lab
+  ================================================================
+  Basée sur : SwiftOnSecurity/sysmon-config (MIT License)
+  Source     : https://github.com/SwiftOnSecurity/sysmon-config
+  Version    : adaptée pour le lab de détection personnel
+  ================================================================
+  Installer avec :
+    Sysmon64.exe -accepteula -i sysmonconfig.xml
+  Mettre à jour :
+    Sysmon64.exe -c sysmonconfig.xml
+  Désinstaller :
+    Sysmon64.exe -u
+  ================================================================
+-->
+
+<Sysmon schemaversion="4.82">
+
+  <!-- Calculer le hash SHA256 de chaque image chargée -->
+  <HashAlgorithms>sha256</HashAlgorithms>
+  <CheckRevocation/>
+
+  <EventFiltering>
+
+    <!-- ============================================================
+         Event ID 1 — Création de processus
+         Capture toutes les créations de processus sauf le bruit courant
+         ============================================================ -->
+    <RuleGroup name="" groupRelation="or">
+      <ProcessCreate onmatch="exclude">
+        <!-- Bruit Windows Update -->
+        <Image condition="is">C:\Windows\system32\wuauclt.exe</Image>
+        <!-- Bruit antivirus -->
+        <Image condition="begin with">C:\Program Files\Windows Defender\</Image>
+        <!-- Bruit planificateur de tâches -->
+        <Image condition="is">C:\Windows\system32\taskhost.exe</Image>
+        <Image condition="is">C:\Windows\SysWOW64\taskhost.exe</Image>
+      </ProcessCreate>
+    </RuleGroup>
+
+    <!-- ============================================================
+         Event ID 2 — Modification de l'horodatage d'un fichier
+         Technique courante de "timestomping" (défense évasion)
+         ============================================================ -->
+    <RuleGroup name="" groupRelation="or">
+      <FileCreateTime onmatch="exclude">
+        <Image condition="is">C:\Windows\system32\backgroundTaskHost.exe</Image>
+      </FileCreateTime>
+    </RuleGroup>
+
+    <!-- ============================================================
+         Event ID 3 — Connexion réseau
+         Filtre le bruit réseau connu
+         ============================================================ -->
+    <RuleGroup name="" groupRelation="or">
+      <NetworkConnect onmatch="exclude">
+        <!-- Bruit DNS système -->
+        <Image condition="is">C:\Windows\System32\svchost.exe</Image>
+        <DestinationPort condition="is">137</DestinationPort>
+        <DestinationPort condition="is">5355</DestinationPort>
+        <!-- Trafic NTP -->
+        <DestinationPort condition="is">123</DestinationPort>
+      </NetworkConnect>
+    </RuleGroup>
+
+    <!-- ============================================================
+         Event ID 5 — Fin de processus
+         ============================================================ -->
+    <RuleGroup name="" groupRelation="or">
+      <ProcessTerminate onmatch="include">
+        <!-- Surveiller uniquement les processus sensibles -->
+        <Image condition="contains">mimikatz</Image>
+        <Image condition="contains">meterpreter</Image>
+        <Image condition="contains">cobalt</Image>
+      </ProcessTerminate>
+    </RuleGroup>
+
+    <!-- ============================================================
+         Event ID 7 — Chargement d'image (DLL)
+         Désactivé par défaut pour les performances
+         ============================================================ -->
+    <RuleGroup name="" groupRelation="or">
+      <ImageLoad onmatch="include">
+        <!-- Surveiller uniquement les DLL suspectes dans les répertoires utilisateur -->
+        <ImageLoaded condition="begin with">C:\Users\</ImageLoaded>
+        <ImageLoaded condition="begin with">C:\Temp\</ImageLoaded>
+        <ImageLoaded condition="begin with">C:\Windows\Temp\</ImageLoaded>
+      </ImageLoad>
+    </RuleGroup>
+
+    <!-- ============================================================
+         Event ID 8 — Création de thread distant (CreateRemoteThread)
+         Technique d'injection de processus
+         ============================================================ -->
+    <RuleGroup name="" groupRelation="or">
+      <CreateRemoteThread onmatch="exclude">
+        <!-- Bruit connu — Visual Studio, etc. -->
+        <SourceImage condition="is">C:\Windows\System32\csrss.exe</SourceImage>
+      </CreateRemoteThread>
+    </RuleGroup>
+
+    <!-- ============================================================
+         Event ID 10 — Accès à un processus (ProcessAccess)
+         Détecte les tentatives de dump de mémoire (LSASS, etc.)
+         ============================================================ -->
+    <RuleGroup name="" groupRelation="or">
+      <ProcessAccess onmatch="include">
+        <!-- Accès à LSASS — technique de vol d'identifiants -->
+        <TargetImage condition="is">C:\Windows\system32\lsass.exe</TargetImage>
+        <TargetImage condition="is">C:\Windows\SysWOW64\lsass.exe</TargetImage>
+      </ProcessAccess>
+    </RuleGroup>
+
+    <!-- ============================================================
+         Event ID 11 — Création de fichier
+         Surveille les dépôts de fichiers suspects
+         ============================================================ -->
+    <RuleGroup name="" groupRelation="or">
+      <FileCreate onmatch="include">
+        <!-- Fichiers exécutables créés dans des répertoires suspects -->
+        <TargetFilename condition="end with">.exe</TargetFilename>
+        <TargetFilename condition="end with">.dll</TargetFilename>
+        <TargetFilename condition="end with">.bat</TargetFilename>
+        <TargetFilename condition="end with">.ps1</TargetFilename>
+        <TargetFilename condition="end with">.vbs</TargetFilename>
+        <TargetFilename condition="begin with">C:\Users\</TargetFilename>
+        <TargetFilename condition="begin with">C:\Windows\Temp\</TargetFilename>
+        <TargetFilename condition="begin with">C:\Temp\</TargetFilename>
+      </FileCreate>
+    </RuleGroup>
+
+    <!-- ============================================================
+         Event ID 12/13/14 — Modification du registre
+         Surveille les clés de persistance courantes
+         ============================================================ -->
+    <RuleGroup name="" groupRelation="or">
+      <RegistryEvent onmatch="include">
+        <!-- Clés de démarrage automatique (Run/RunOnce) -->
+        <TargetObject condition="contains">CurrentVersion\Run</TargetObject>
+        <!-- Services Windows -->
+        <TargetObject condition="contains">CurrentControlSet\Services</TargetObject>
+        <!-- Détournement de COM -->
+        <TargetObject condition="contains">Software\Classes\CLSID</TargetObject>
+        <!-- AppInit_DLLs — injection de DLL -->
+        <TargetObject condition="contains">AppInit_DLLs</TargetObject>
+      </RegistryEvent>
+    </RuleGroup>
+
+    <!-- ============================================================
+         Event ID 15 — Flux de données alternatif (ADS)
+         Technique de dissimulation de données
+         ============================================================ -->
+    <RuleGroup name="" groupRelation="or">
+      <FileCreateStreamHash onmatch="include">
+        <TargetFilename condition="end with">.exe</TargetFilename>
+        <TargetFilename condition="end with">.dll</TargetFilename>
+      </FileCreateStreamHash>
+    </RuleGroup>
+
+    <!-- ============================================================
+         Event ID 17/18 — Pipes nommés
+         Utilisés par certains outils d'attaque (PsExec, Cobalt Strike)
+         ============================================================ -->
+    <RuleGroup name="" groupRelation="or">
+      <PipeEvent onmatch="include">
+        <PipeName condition="begin with">\psexec</PipeName>
+        <PipeName condition="begin with">\MSSE-</PipeName>
+        <PipeName condition="begin with">\postex_</PipeName>
+      </PipeEvent>
+    </RuleGroup>
+
+    <!-- ============================================================
+         Event ID 22 — Requête DNS
+         Surveille les requêtes DNS vers des domaines suspects
+         ============================================================ -->
+    <RuleGroup name="" groupRelation="or">
+      <DnsQuery onmatch="exclude">
+        <!-- Bruit DNS courant -->
+        <QueryName condition="end with">.microsoft.com</QueryName>
+        <QueryName condition="end with">.windowsupdate.com</QueryName>
+        <QueryName condition="end with">.office.com</QueryName>
+        <QueryName condition="end with">.office365.com</QueryName>
+      </DnsQuery>
+    </RuleGroup>
+
+  </EventFiltering>
+</Sysmon>
